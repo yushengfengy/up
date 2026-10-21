@@ -46,10 +46,22 @@ Reddit 对云服务器IP限流严重，已停用：
 环境变量：
 | 变量 | 说明 |
 |---|---|
-| `AI_BASE_URL` | OpenAI 兼容地址，默认 `https://api.openai.com/v1`（需含 `/v1`） |
-| `AI_API_KEY` | 必填 |
-| `AI_MODEL` | 默认 `gpt-4o-mini` |
-| `AI_JSON_MODE` | 设 `0` 关闭 `response_format`（不支持的服务商用） |
-| `SEARCH_PROVIDER` | `duckduckgo`(默认,免key,云IP可能被限) / `tavily` / `brave` / `serper` / `searxng` |
+| `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | 内置提供商 `default`（OpenAI 兼容，`AI_BASE_URL` 需含 `/v1`）。在 Railway Cloud Agent VM 内未设置时回退到平台网关 |
+| `AI_JSON_MODE` | 设 `0` 关闭 `response_format`（不支持的服务商用；400 时也会自动重试） |
+| `AI_TEMPERATURE` | 可选；默认不发送（部分模型不支持） |
+| `SEARCH_PROVIDER` | `auto`(默认：duckduckgo→bing，免key，质量一般，云IP易被限) / `tavily` / `brave` / `serper` / `searxng` / `bing` / `duckduckgo`。正式使用建议 tavily 或 brave |
 | `SEARCH_API_KEY` | tavily/brave/serper 的 key |
 | `SEARXNG_URL` | searxng 实例地址 |
+
+## 用户自带 AI 提供商
+需设置 `INGEST_TOKEN`，下列接口都要 `Authorization: Bearer <token>`：
+```bash
+# 添加（保存到 data/providers.json，GET 时 key 只显示掩码）
+curl -XPOST $URL/api/providers -H "Authorization: Bearer $T" \
+  -d '{"id":"mine","baseUrl":"https://api.deepseek.com/v1","apiKey":"sk-...","model":"deepseek-chat"}'
+curl $URL/api/providers -H "Authorization: Bearer $T"            # 列表
+curl -XDELETE "$URL/api/providers?id=mine" -H "Authorization: Bearer $T"
+# 使用
+curl -XPOST $URL/api/research -H "Authorization: Bearer $T" -d '{"query":"...","provider":"mine"}'
+```
+不传 `provider` 就用内置 `default`。

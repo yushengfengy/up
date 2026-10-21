@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { collectOnce } from './collector.mjs';
 import { research } from './research.mjs';
-import { aiConfigured } from './ai.mjs';
+import { aiConfigured, listProviders, addProvider, removeProvider } from './ai.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, 'data');
@@ -84,7 +84,7 @@ const server = http.createServer(async (req, res) => {
   
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
@@ -108,6 +108,20 @@ const server = http.createServer(async (req, res) => {
       const sources = loadJson(path.join(__dirname, 'sources.json'), []);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ sources, status }, null, 2));
+    } else if (url.pathname === '/api/providers') {
+      // 提供商管理：必须设置 INGEST_TOKEN 且鉴权通过（含 API key，不可匿名）
+      const authed = TOKEN && (req.headers.authorization || '') === `Bearer ${TOKEN}`;
+      const send = (code, o) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
+      if (!authed) return send(TOKEN ? 401 : 403, { error: TOKEN ? 'unauthorized' : 'set INGEST_TOKEN to manage providers' });
+      try {
+        if (req.method === 'GET') return send(200, { providers: listProviders() });
+        let body = '';
+        for await (const chunk of req) { body += chunk; if (body.length > 20000) break; }
+        const j = JSON.parse(body || '{}');
+        if (req.method === 'POST') { addProvider(j); return send(200, { ok: true, providers: listProviders() }); }
+        if (req.method === 'DELETE') return send(removeProvider(String(j.id || url.searchParams.get('id') || '')) ? 200 : 404, { ok: true, providers: listProviders() });
+        send(405, { error: 'method not allowed' });
+      } catch (e) { send(e.status || 400, { error: e.message }); }
     } else if (url.pathname === '/api/research' && req.method === 'POST') {
       // 会消耗 AI/搜索额度：设置了 INGEST_TOKEN 就必须鉴权
       if (TOKEN && (req.headers.authorization || '') !== `Bearer ${TOKEN}`) {
@@ -118,10 +132,11 @@ const server = http.createServer(async (req, res) => {
       let body = '';
       for await (const chunk of req) { body += chunk; if (body.length > 20000) break; }
       let q = '';
-      try { q = String(JSON.parse(body || '{}').query || '').trim(); } catch {}
+      let prov = 'default';
+      try { const j = JSON.parse(body || '{}'); q = String(j.query || '').trim(); prov = String(j.provider || 'default'); } catch {}
       if (!q) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'query required' })); return; }
       try {
-        const out = await research(q.slice(0, 2000));
+        const out = await research(q.slice(0, 2000), prov);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify(out, null, 2));
       } catch (e) {
