@@ -60,13 +60,24 @@ code{background:#eee; padding:2px 6px; border-radius:6px}
 <p>聚合 LowEndBox / LowEndTalk / NodeSeek / Reddit VPS 板块。分数按 <code>rules.json</code> 规则 + 时间半衰期计算。
 <a href="/rss">RSS</a> · <a href="/api/items">/api/items</a> · <a href="/api/sources">/api/sources</a></p>
 <h2>AI 研究</h2>
-<form id="rf" style="display:flex;gap:8px;flex-wrap:wrap"><input id="rq" placeholder="输入需求，如：找适合跑 Docker 的便宜日本 VPS" style="flex:1;min-width:240px;padding:8px"/><input id="rt" type="password" placeholder="Token(如已设置)" style="width:140px;padding:8px"/><button style="padding:8px 16px">分析并搜索</button></form>
+<form id="rf" style="display:flex;gap:8px;flex-wrap:wrap"><input id="rq" placeholder="输入需求，如：找适合跑 Docker 的便宜日本 VPS" style="flex:1;min-width:240px;padding:8px"/><input id="rt" type="password" placeholder="Token(如已设置)" style="width:140px;padding:8px"/><select id="rp" style="padding:8px"><option value="default">内置 AI</option></select><select id="rd" style="padding:8px"><option value="1">深度1</option><option value="2" selected>深度2</option><option value="3">深度3</option></select><input id="ra" placeholder="限定域名(逗号分隔,可空)" style="width:200px;padding:8px"/><button style="padding:8px 16px">分析并搜索</button></form>
+<details style="margin:8px 0"><summary>AI 提供商管理（需 Token）</summary>
+<div id="pl" class="meta" style="margin:6px 0"></div>
+<form id="pf" style="display:flex;gap:6px;flex-wrap:wrap"><input name="id" placeholder="id 如 mine" style="width:90px;padding:6px"/><input name="baseUrl" placeholder="https://api.xxx.com/v1" style="flex:1;min-width:200px;padding:6px"/><input name="apiKey" type="password" placeholder="API Key" style="width:150px;padding:6px"/><input name="model" placeholder="model" style="width:130px;padding:6px"/><button>添加/更新</button></form></details>
 <div id="ro" style="margin:12px 0"></div>
 <script>
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const safe=u=>/^https?:\/\//i.test(u)?u:'#';
+const tok=()=>document.getElementById('rt').value;
+const ah=()=>tok()?{Authorization:'Bearer '+tok()}:{};
+async function loadP(){try{const r=await fetch('/api/providers',{headers:ah()});const j=await r.json();if(!r.ok)throw new Error(j.error);
+document.getElementById('rp').innerHTML=j.providers.filter(p=>p.configured).map(p=>'<option value="'+esc(p.id)+'">'+esc(p.builtin?'内置 AI':p.name)+' · '+esc(p.model)+'</option>').join('');
+document.getElementById('pl').innerHTML=j.providers.map(p=>esc(p.id)+' · '+esc(p.baseUrl)+' · '+esc(p.model)+' · '+esc(p.apiKey)+(p.builtin?'':' <a href="#" data-del="'+esc(p.id)+'">删除</a>')).join('<br>')}catch(e){document.getElementById('pl').textContent='需要有效 Token：'+e.message}}
+document.getElementById('rt').onchange=loadP;
+document.getElementById('pl').onclick=async e=>{const id=e.target.dataset?.del;if(!id)return;e.preventDefault();await fetch('/api/providers?id='+encodeURIComponent(id),{method:'DELETE',headers:ah()});loadP()};
+document.getElementById('pf').onsubmit=async e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));const r=await fetch('/api/providers',{method:'POST',headers:{'Content-Type':'application/json',...ah()},body:JSON.stringify(f)});const j=await r.json();if(!r.ok)alert(j.error);else{e.target.reset();loadP()}};
 document.getElementById('rf').onsubmit=async e=>{e.preventDefault();const o=document.getElementById('ro');o.textContent='分析中...';
-try{const t=document.getElementById('rt').value;const r=await fetch('/api/research',{method:'POST',headers:{'Content-Type':'application/json',...(t?{Authorization:'Bearer '+t}:{})},body:JSON.stringify({query:document.getElementById('rq').value})});
+try{const t=document.getElementById('rt').value;const r=await fetch('/api/research',{method:'POST',headers:{'Content-Type':'application/json',...(t?{Authorization:'Bearer '+t}:{})},body:JSON.stringify({query:document.getElementById('rq').value,provider:document.getElementById('rp').value,depth:+document.getElementById('rd').value,allowed_domains:document.getElementById('ra').value.split(',').map(s=>s.trim()).filter(Boolean).slice(0,5)})});
 const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);
 o.innerHTML='<p><b>意图：</b>'+esc(j.intent)+'</p><p><b>关键词：</b>'+j.keywords.map(k=>'<span class="badge">'+esc(k)+'</span>').join('')+'</p><div style="white-space:pre-wrap;background:#fff;border:1px solid #eee;border-radius:10px;padding:12px">'+esc(j.answer||j.summary)+'</div><p><b>来源：</b></p>'+(j.sources||[]).map(s=>'<div class="meta">['+s.n+'] <a href="'+esc(safe(s.url))+'" target="_blank" rel="noopener">'+esc(s.title)+'</a>'+(s.read?' · 已阅读':'')+'</div>').join('')+'<details><summary>研究过程</summary><pre style="font-size:12px;white-space:pre-wrap">'+esc(JSON.stringify(j.steps,null,1))+'</pre></details>'+j.picks.map(p=>'<div class="item"><div class="score">'+esc(p.aiScore)+'</div><div class="main"><a href="'+esc(safe(p.url))+'" target="_blank" rel="noopener">'+esc(p.title)+'</a><div class="meta">'+esc(p.reason)+'</div></div></div>').join('');
 }catch(err){o.textContent='错误：'+err.message}};
