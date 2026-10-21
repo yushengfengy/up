@@ -1,0 +1,14 @@
+{
+  "name": "vps-hot",
+  "version": "1.3.0",
+  "description": "VPS热点聚合 - 无依赖",
+  "type": "module",
+  "main": "server.mjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "collect": "node collector.mjs"
+  }
+}

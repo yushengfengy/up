@@ -1,0 +1,54 @@
+{
+  "minScore": 0,
+  "halfLifeHours": 24,
+  "sourceWeight": {
+    "default": 1.0,
+    "lowendtalk": 1.2,
+    "lowendbox": 1.2,
+    "nodeseek": 1.5
+  },
+  "positiveRules": [
+    {
+      "pattern": "free vps|免费|free tier|giveaway|赠送",
+      "score": 10,
+      "flags": "i"
+    },
+    {
+      "pattern": "\\$0|0\\$|\\b0\\b.*vps|永久免费",
+      "score": 8,
+      "flags": "i"
+    },
+    {
+      "pattern": "oracle|甲骨文|oci",
+      "score": 5,
+      "flags": "i"
+    },
+    {
+      "pattern": "黑五|black friday|cyber monday|双11|促销|deal|优惠|\\d+% off",
+      "score": 4,
+      "flags": "i"
+    },
+    {
+      "pattern": "vps|云服务器|nat|小鸡",
+      "score": 2,
+      "flags": "i"
+    }
+  ],
+  "negativeRules": [
+    {
+      "pattern": "vpn|代理|机场",
+      "score": -15,
+      "flags": "i"
+    },
+    {
+      "pattern": "已结束|expired|售罄|out of stock",
+      "score": -20,
+      "flags": "i"
+    },
+    {
+      "pattern": "招聘|求职|job",
+      "score": -10,
+      "flags": "i"
+    }
+  ]
+}
