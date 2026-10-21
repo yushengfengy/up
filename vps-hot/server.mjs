@@ -85,7 +85,7 @@ while(true){const {done,value}=await rd.read();if(done)break;buf+=dec.decode(val
 while((i=buf.indexOf('\\n\\n'))>=0){const blk=buf.slice(0,i);buf=buf.slice(i+2);const ev=/^event: (.*)$/m.exec(blk)?.[1],dt=/^data: (.*)$/m.exec(blk)?.[1];if(!ev||!dt)continue;const d=JSON.parse(dt);
 if(ev==='step'){log.push(label(d));pg().innerHTML=log.map(x=>'· '+esc(x)).join('<br>')}else if(ev==='error')throw new Error(d.error);else if(ev==='done')j=d}}
 if(!j)throw new Error('连接中断');
-o.innerHTML='<p><b>意图：</b>'+esc(j.intent)+'</p><p><b>关键词：</b>'+j.keywords.map(k=>'<span class="badge">'+esc(k)+'</span>').join('')+'</p><div style="white-space:pre-wrap;background:#fff;border:1px solid #eee;border-radius:10px;padding:12px">'+esc(j.answer||j.summary)+'</div><p><b>来源：</b></p>'+(j.sources||[]).map(s=>'<div class="meta">['+s.n+'] <a href="'+esc(safe(s.url))+'" target="_blank" rel="noopener">'+esc(s.title)+'</a>'+(s.read?' · 已阅读':'')+'</div>').join('')+'<details><summary>研究过程</summary><div class="meta">'+log.map(x=>'· '+esc(x)).join('<br>')+'</div></details>';
+o.innerHTML='<p><b>意图：</b>'+esc(j.intent)+'</p><p><b>关键词：</b>'+j.keywords.map(k=>'<span class="badge">'+esc(k)+'</span>').join('')+'</p><div style="white-space:pre-wrap;background:#fff;border:1px solid #eee;border-radius:10px;padding:12px">'+esc(j.answer||j.summary)+'</div>'+((j.sources||[]).length?'<p><b>来源：</b></p>':'')+(j.sources||[]).map(s=>'<div class="meta">['+s.n+'] <a href="'+esc(safe(s.url))+'" target="_blank" rel="noopener">'+esc(s.title)+'</a>'+(s.read?' · 已阅读':'')+'</div>').join('')+'<details><summary>研究过程</summary><div class="meta">'+log.map(x=>'· '+esc(x)).join('<br>')+'</div></details>';
 }catch(err){o.textContent='错误：'+err.message}};
 </script>
 <div>${rows || '<p>正在抓取中，稍后刷新...</p>'}</div>
@@ -106,7 +106,9 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   try {
-    if (url.pathname === '/' || url.pathname === '/index.html') {
+    if (url.pathname === '/favicon.ico') {
+      res.writeHead(204); res.end();
+    } else if (url.pathname === '/' || url.pathname === '/index.html') {
       const items = loadJson(DATA_FILE, []);
       const status = loadJson(STATUS_FILE, {});
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
