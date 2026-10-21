@@ -68,7 +68,7 @@ const safe=u=>/^https?:\/\//i.test(u)?u:'#';
 document.getElementById('rf').onsubmit=async e=>{e.preventDefault();const o=document.getElementById('ro');o.textContent='分析中...';
 try{const t=document.getElementById('rt').value;const r=await fetch('/api/research',{method:'POST',headers:{'Content-Type':'application/json',...(t?{Authorization:'Bearer '+t}:{})},body:JSON.stringify({query:document.getElementById('rq').value})});
 const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);
-o.innerHTML='<p><b>意图：</b>'+esc(j.intent)+'</p><p><b>关键词：</b>'+j.keywords.map(k=>'<span class="badge">'+esc(k)+'</span>').join('')+'</p><p>'+esc(j.summary)+'</p>'+j.picks.map(p=>'<div class="item"><div class="score">'+esc(p.aiScore)+'</div><div class="main"><a href="'+esc(safe(p.url))+'" target="_blank" rel="noopener">'+esc(p.title)+'</a><div class="meta">'+esc(p.reason)+'</div></div></div>').join('');
+o.innerHTML='<p><b>意图：</b>'+esc(j.intent)+'</p><p><b>关键词：</b>'+j.keywords.map(k=>'<span class="badge">'+esc(k)+'</span>').join('')+'</p><div style="white-space:pre-wrap;background:#fff;border:1px solid #eee;border-radius:10px;padding:12px">'+esc(j.answer||j.summary)+'</div><p><b>来源：</b></p>'+(j.sources||[]).map(s=>'<div class="meta">['+s.n+'] <a href="'+esc(safe(s.url))+'" target="_blank" rel="noopener">'+esc(s.title)+'</a>'+(s.read?' · 已阅读':'')+'</div>').join('')+'<details><summary>研究过程</summary><pre style="font-size:12px;white-space:pre-wrap">'+esc(JSON.stringify(j.steps,null,1))+'</pre></details>'+j.picks.map(p=>'<div class="item"><div class="score">'+esc(p.aiScore)+'</div><div class="main"><a href="'+esc(safe(p.url))+'" target="_blank" rel="noopener">'+esc(p.title)+'</a><div class="meta">'+esc(p.reason)+'</div></div></div>').join('');
 }catch(err){o.textContent='错误：'+err.message}};
 </script>
 <div>${rows || '<p>正在抓取中，稍后刷新...</p>'}</div>
@@ -132,11 +132,11 @@ const server = http.createServer(async (req, res) => {
       let body = '';
       for await (const chunk of req) { body += chunk; if (body.length > 20000) break; }
       let q = '';
-      let prov = 'default';
-      try { const j = JSON.parse(body || '{}'); q = String(j.query || '').trim(); prov = String(j.provider || 'default'); } catch {}
+      let ropts = {};
+      try { const j = JSON.parse(body || '{}'); q = String(j.query || '').trim(); ropts = { provider: String(j.provider || 'default'), depth: j.depth, allowed_domains: j.allowed_domains, excluded_domains: j.excluded_domains }; } catch {}
       if (!q) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'query required' })); return; }
       try {
-        const out = await research(q.slice(0, 2000), prov);
+        const out = await research(q.slice(0, 2000), ropts);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify(out, null, 2));
       } catch (e) {

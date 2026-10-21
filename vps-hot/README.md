@@ -40,7 +40,14 @@ Reddit 对云服务器IP限流严重，已停用：
 改完 sources.json 后重新 railway up
 
 ## AI 研究（v1.3）
-`POST /api/research` `{"query":"你的需求"}` → AI 提取关键词 → 联网搜索 → AI 筛选总结。首页也有输入框。
+`POST /api/research` → 类 Grok `web_search` 的多轮研究：AI 规划查询 → 联网搜索 → AI 选页 → 抓取阅读正文 → 评估是否足够，不够则追问新查询 → 带 `[n]` 引用的最终回答。首页也有输入框。
+```json
+{"query":"需求","depth":2,"provider":"default","allowed_domains":["lowendtalk.com"],"excluded_domains":[]}
+```
+- `depth` 1-3（搜索轮数，默认 2）；`allowed_domains`/`excluded_domains` 各最多 5 个，二选一
+- 返回 `answer`（markdown）、`sources`（被引用来源）、`steps`（研究过程）、`results`（全部搜索结果）
+- 抓取页面做了 SSRF 防护（拒绝内网/回环/链路本地地址，逐跳校验重定向），单页最多 1MB、取前 4000 字
+- AI 调用数 ≈ 2 + 2×(depth-1) + 1，`depth=1` 最省
 设置了 `INGEST_TOKEN` 时需带 `Authorization: Bearer <token>`。
 
 环境变量：
