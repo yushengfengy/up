@@ -76,10 +76,16 @@ document.getElementById('pl').innerHTML=j.providers.map(p=>esc(p.id)+' · '+esc(
 document.getElementById('rt').onchange=loadP;
 document.getElementById('pl').onclick=async e=>{const id=e.target.dataset?.del;if(!id)return;e.preventDefault();await fetch('/api/providers?id='+encodeURIComponent(id),{method:'DELETE',headers:ah()});loadP()};
 document.getElementById('pf').onsubmit=async e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));const r=await fetch('/api/providers',{method:'POST',headers:{'Content-Type':'application/json',...ah()},body:JSON.stringify(f)});const j=await r.json();if(!r.ok)alert(j.error);else{e.target.reset();loadP()}};
-document.getElementById('rf').onsubmit=async e=>{e.preventDefault();const o=document.getElementById('ro');o.textContent='分析中...';
-try{const t=document.getElementById('rt').value;const r=await fetch('/api/research',{method:'POST',headers:{'Content-Type':'application/json',...(t?{Authorization:'Bearer '+t}:{})},body:JSON.stringify({query:document.getElementById('rq').value,provider:document.getElementById('rp').value,depth:+document.getElementById('rd').value,allowed_domains:document.getElementById('ra').value.split(',').map(s=>s.trim()).filter(Boolean).slice(0,5)})});
-const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);
-o.innerHTML='<p><b>意图：</b>'+esc(j.intent)+'</p><p><b>关键词：</b>'+j.keywords.map(k=>'<span class="badge">'+esc(k)+'</span>').join('')+'</p><div style="white-space:pre-wrap;background:#fff;border:1px solid #eee;border-radius:10px;padding:12px">'+esc(j.answer||j.summary)+'</div><p><b>来源：</b></p>'+(j.sources||[]).map(s=>'<div class="meta">['+s.n+'] <a href="'+esc(safe(s.url))+'" target="_blank" rel="noopener">'+esc(s.title)+'</a>'+(s.read?' · 已阅读':'')+'</div>').join('')+'<details><summary>研究过程</summary><pre style="font-size:12px;white-space:pre-wrap">'+esc(JSON.stringify(j.steps,null,1))+'</pre></details>'+j.picks.map(p=>'<div class="item"><div class="score">'+esc(p.aiScore)+'</div><div class="main"><a href="'+esc(safe(p.url))+'" target="_blank" rel="noopener">'+esc(p.title)+'</a><div class="meta">'+esc(p.reason)+'</div></div></div>').join('');
+document.getElementById('rf').onsubmit=async e=>{e.preventDefault();const o=document.getElementById('ro');o.innerHTML='<div id="pg" class="meta">开始研究...</div>';const pg=()=>document.getElementById('pg');
+const label=s=>({plan:'AI 分析需求...',keywords:'关键词：'+(s.keywords||[]).join('、'),search:'第'+s.round+'轮搜索：'+(s.queries||[]).join(' ｜ ')+'（找到 '+s.found+' 条）',read:'已阅读 '+(s.urls||[]).length+' 个页面',read_failed:'读取失败：'+s.url,assess:s.enough?'信息足够，开始总结':'信息不足，继续追问',answer:'正在生成带引用的回答...'}[s.action]||s.action);
+try{const t=tok();const r=await fetch('/api/research?stream=1',{method:'POST',headers:{'Content-Type':'application/json',...(t?{Authorization:'Bearer '+t}:{})},body:JSON.stringify({query:document.getElementById('rq').value,provider:document.getElementById('rp').value,depth:+document.getElementById('rd').value,allowed_domains:document.getElementById('ra').value.split(',').map(s=>s.trim()).filter(Boolean).slice(0,5)})});
+if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.error||r.status)}
+const rd=r.body.getReader(),dec=new TextDecoder();let buf='',j=null,log=[];
+while(true){const {done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;
+while((i=buf.indexOf('\\n\\n'))>=0){const blk=buf.slice(0,i);buf=buf.slice(i+2);const ev=/^event: (.*)$/m.exec(blk)?.[1],dt=/^data: (.*)$/m.exec(blk)?.[1];if(!ev||!dt)continue;const d=JSON.parse(dt);
+if(ev==='step'){log.push(label(d));pg().innerHTML=log.map(x=>'· '+esc(x)).join('<br>')}else if(ev==='error')throw new Error(d.error);else if(ev==='done')j=d}}
+if(!j)throw new Error('连接中断');
+o.innerHTML='<p><b>意图：</b>'+esc(j.intent)+'</p><p><b>关键词：</b>'+j.keywords.map(k=>'<span class="badge">'+esc(k)+'</span>').join('')+'</p><div style="white-space:pre-wrap;background:#fff;border:1px solid #eee;border-radius:10px;padding:12px">'+esc(j.answer||j.summary)+'</div><p><b>来源：</b></p>'+(j.sources||[]).map(s=>'<div class="meta">['+s.n+'] <a href="'+esc(safe(s.url))+'" target="_blank" rel="noopener">'+esc(s.title)+'</a>'+(s.read?' · 已阅读':'')+'</div>').join('')+'<details><summary>研究过程</summary><div class="meta">'+log.map(x=>'· '+esc(x)).join('<br>')+'</div></details>';
 }catch(err){o.textContent='错误：'+err.message}};
 </script>
 <div>${rows || '<p>正在抓取中，稍后刷新...</p>'}</div>
@@ -146,6 +152,16 @@ const server = http.createServer(async (req, res) => {
       let ropts = {};
       try { const j = JSON.parse(body || '{}'); q = String(j.query || '').trim(); ropts = { provider: String(j.provider || 'default'), depth: j.depth, allowed_domains: j.allowed_domains, excluded_domains: j.excluded_domains }; } catch {}
       if (!q) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'query required' })); return; }
+      if (url.searchParams.get('stream') === '1') {
+        // SSE：逐步推送研究进度，最后 event: done 带完整结果
+        res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' });
+        const send = (ev, data) => res.write(`event: ${ev}\ndata: ${JSON.stringify(data)}\n\n`);
+        const ping = setInterval(() => res.write(': ping\n\n'), 15000);
+        try { send('done', await research(q.slice(0, 2000), { ...ropts, onStep: s => send('step', s) })); }
+        catch (e) { send('error', { error: e.message }); }
+        clearInterval(ping); res.end();
+        return;
+      }
       try {
         const out = await research(q.slice(0, 2000), ropts);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });

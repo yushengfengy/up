@@ -47,6 +47,7 @@ Reddit 对云服务器IP限流严重，已停用：
 - `depth` 1-3（搜索轮数，默认 2）；`allowed_domains`/`excluded_domains` 各最多 5 个，二选一
 - 返回 `answer`（markdown）、`sources`（被引用来源）、`steps`（研究过程）、`results`（全部搜索结果）
 - 抓取页面做了 SSRF 防护（拒绝内网/回环/链路本地地址，逐跳校验重定向），单页最多 1MB、取前 4000 字
+- 流式进度：`POST /api/research?stream=1` 返回 SSE，`event: step` 逐步推送（plan/keywords/search/read/assess/answer），最后 `event: done` 带完整结果，出错为 `event: error`；首页默认使用
 - AI 调用数 ≈ 2 + 2×(depth-1) + 1，`depth=1` 最省
 设置了 `INGEST_TOKEN` 时需带 `Authorization: Bearer <token>`。
 

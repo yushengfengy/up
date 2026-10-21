@@ -23,9 +23,12 @@ export async function research(query, opts = {}) {
   const depth = Math.min(Math.max(parseInt(opts.depth ?? 2, 10) || 1, 1), 3);
   const allow = cleanDomains(opts.allowed_domains), deny = allow.length ? [] : cleanDomains(opts.excluded_domains);
   const steps = [];
+  const emit = s => { steps.push(s); try { opts.onStep?.(s); } catch {} };
   const errors = [];
 
+  emit({ action: 'plan' });
   const kw = await extractKeywords(query, provider);
+  emit({ action: 'keywords', intent: kw.intent, keywords: kw.keywords, queries: kw.queries });
   let queries = kw.queries.slice(0, 3);
   const all = [];            // 全部搜索结果（带稳定编号）
   const seen = new Set();
@@ -38,7 +41,7 @@ export async function research(query, opts = {}) {
     errors.push(...se);
     const fresh = results.filter(r => !seen.has(r.url) && domainOk(r.url, allow, deny));
     fresh.forEach(r => { seen.add(r.url); r.n = all.length + 1; all.push(r); });
-    steps.push({ round, action: 'search', queries, found: fresh.length });
+    emit({ round, action: 'search', queries, found: fresh.length });
     if (!fresh.length) break;
 
     // 2. AI 选择要打开阅读的页面
@@ -55,9 +58,9 @@ export async function research(query, opts = {}) {
     pages.forEach((p, i) => {
       const r = all[pick[i] - 1];
       if (p.status === 'fulfilled' && p.value.text.length > 200) read.push({ n: r.n, url: r.url, title: p.value.title || r.title, text: p.value.text });
-      else steps.push({ round, action: 'read_failed', url: r.url, reason: p.status === 'rejected' ? p.reason.message : 'too little text' });
+      else emit({ round, action: 'read_failed', url: r.url, reason: p.status === 'rejected' ? p.reason.message : 'too little text' });
     });
-    steps.push({ round, action: 'read', urls: read.filter(x => pick.includes(x.n)).map(x => x.url) });
+    emit({ round, action: 'read', urls: read.filter(x => pick.includes(x.n)).map(x => x.url) });
 
     // 4. 评估：信息够不够，是否需要追问
     if (round === depth) break;
@@ -65,7 +68,7 @@ export async function research(query, opts = {}) {
       const ctx = read.map(p => `[${p.n}] ${p.title}\n${p.text.slice(0, 1500)}`).join('\n\n');
       const a = await json('你是研究助理。基于已读内容判断能否充分回答用户需求。只输出 JSON：{"enough":true|false,"notes":"目前已确认的要点","followups":["还缺什么，用于下一轮搜索的新查询，最多3条"]}', `需求：${query}\n\n已读内容：\n${ctx}`, provider);
       notes = String(a.notes || '');
-      steps.push({ round, action: 'assess', enough: !!a.enough, notes });
+      emit({ round, action: 'assess', enough: !!a.enough, notes });
       if (a.enough) break;
       queries = arr(a.followups).map(String).filter(Boolean).slice(0, 2);
       if (!queries.length) break;
@@ -74,6 +77,7 @@ export async function research(query, opts = {}) {
 
   if (!all.length) return { query, ...kw, answer: '没有搜索到结果', summary: '没有搜索到结果', picks: [], sources: [], results: [], steps, errors };
 
+  emit({ action: 'answer' });
   // 5. 最终回答：只能依据已读页面和搜索摘要，用 [n] 标注来源
   const ctx = read.length
     ? read.map(p => `[${p.n}] ${p.title}\n${p.url}\n${p.text}`).join('\n\n')
