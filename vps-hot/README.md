@@ -57,7 +57,7 @@ Reddit 对云服务器IP限流严重，已停用：
 | `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | 内置提供商 `default`（OpenAI 兼容，`AI_BASE_URL` 需含 `/v1`）。在 Railway Cloud Agent VM 内未设置时回退到平台网关 |
 | `AI_JSON_MODE` | 设 `0` 关闭 `response_format`（不支持的服务商用；400 时也会自动重试） |
 | `AI_TEMPERATURE` | 可选；默认不发送（部分模型不支持） |
-| `SEARCH_PROVIDER` | `auto`(默认：grok(有key时)→brave_html→duckduckgo，免key) / `tavily` / `brave` / `serper` / `searxng` / `bing` / `grok` / `duckduckgo`。正式使用建议 tavily 或 brave |
+| `SEARCH_PROVIDER` | `auto`(默认：searxng(有 SEARXNG_URL 时)→grok(有 key 时)→brave_html→duckduckgo) / `tavily` / `brave` / `serper` / `searxng` / `bing` / `grok` / `duckduckgo`。正式使用建议 tavily 或 brave |
 | `XAI_API_KEY` | Grok 联网搜索 key。设置后 `SEARCH_PROVIDER=auto` 会优先用 Grok；或显式 `SEARCH_PROVIDER=grok` |
 | `GROK_MODEL` / `XAI_BASE_URL` | 默认 `grok-4.7` / `https://api.x.ai/v1` |
 | `GROK_ALLOWED_DOMAINS` / `GROK_EXCLUDED_DOMAINS` | 逗号分隔，最多 5 个，二选一，限制或排除搜索的域名 |
@@ -83,3 +83,13 @@ curl -XPOST $URL/api/research -H "Authorization: Bearer $T" -d '{"query":"...","
 - 直连失败（403/429/5xx 等）时回退 Jina Reader（`r.jina.ai`，会把目标 URL 发给第三方）；`FETCH_FALLBACK_JINA=0` 关闭。
 - 搜索结果内存缓存 6 小时（`SEARCH_CACHE_TTL_MS`）；Brave 免 key 遇 429 退避重试 2 次。免 key 仍受限流，正式使用请配 key。
 - 内置 AI 不可用（如部署后无平台网关）时，`default` 自动回退到用户添加的第一个可用提供商。
+
+## 解决搜索限流：自建 SearXNG（推荐，免 key）
+免 key 的网页抓取（Brave/DDG）会被限流。SearXNG 聚合 Google、Brave 等多个引擎，单个引擎被限流不影响整体，实测每个查询 30~40 条结果、无 429。
+```bash
+# 本机/VM
+docker run -d --restart unless-stopped --name searx -p 8888:8080 \
+  -v $PWD/../searxng/settings.yml:/etc/searxng/settings.yml searxng/searxng:latest
+SEARXNG_URL=http://localhost:8888 node server.mjs
+```
+Railway：用仓库根目录的 `searxng/`（Dockerfile + settings.yml）建一个**单独服务**，设置变量 `SEARXNG_SECRET`（随机值），**不要开公网域名**；vps-hot 设置 `SEARXNG_URL=http://<服务名>.railway.internal:8080`（私网）。设置后 `auto` 会优先使用它。

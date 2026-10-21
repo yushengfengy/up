@@ -2,7 +2,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 const execFileP = promisify(execFile);
-// SEARCH_PROVIDER: tavily | brave | serper | searxng | duckduckgo | bing | grok | auto (default: [grok if XAI_API_KEY] -> brave_html -> duckduckgo; bing 相关性差，仅显式选用)
+// SEARCH_PROVIDER: tavily | brave | serper | searxng | duckduckgo | bing | grok | auto (default: [searxng if SEARXNG_URL] -> [grok if XAI_API_KEY] -> brave_html -> duckduckgo; bing 相关性差，仅显式选用)
 // Keys: SEARCH_API_KEY ; SEARXNG_URL for searxng
 async function getJson(url, opts = {}, timeout = 15000) {
   const ctrl = new AbortController();
@@ -156,7 +156,7 @@ const providers = {
   async searxng(q, n) {
     const base = (process.env.SEARXNG_URL || '').replace(/\/+$/, '');
     if (!base) throw new Error('SEARXNG_URL not set');
-    const r = await getJson(`${base}/search?q=${encodeURIComponent(q)}&format=json`);
+    const r = await getJson(`${base}/search?q=${encodeURIComponent(q)}&format=json`, {}, 30000);
     return ((await r.json()).results || []).slice(0, n).map(x => norm(x.title, x.url, x.content));
   },
   async duckduckgo(q, n) {
@@ -195,7 +195,8 @@ export async function webSearch(query, n = 8) {
 async function webSearchRaw(query, n = 8) {
   const name = (process.env.SEARCH_PROVIDER || 'auto').toLowerCase();
   if (name === 'auto') {
-    const chain = process.env.XAI_API_KEY ? ['grok', 'brave_html', 'duckduckgo'] : ['brave_html', 'duckduckgo'];
+    // 优先级：自建 SearXNG（免 key、抗限流）→ Grok（有 key）→ Brave 网页版 → DuckDuckGo
+    const chain = [...(process.env.SEARXNG_URL ? ['searxng'] : []), ...(process.env.XAI_API_KEY ? ['grok'] : []), 'brave_html', 'duckduckgo'];
     for (const k of chain) {
       try { const r = await providers[k](query, n); if (r.length) return r; } catch (e) { console.error(`[search] ${k} failed: ${e.message}`); }
     }

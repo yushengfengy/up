@@ -1,0 +1,9 @@
+use_default_settings: true
+server:
+  # 通过环境变量 SEARXNG_SECRET 覆盖；部署时务必设置随机值
+  secret_key: "change-me-via-SEARXNG_SECRET"
+  limiter: false        # 仅内网使用；若暴露公网请开启 limiter 并配置 Valkey
+  image_proxy: false
+search:
+  formats: [html, json]
+  safe_search: 0
