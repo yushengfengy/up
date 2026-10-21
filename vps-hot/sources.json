@@ -1,0 +1,82 @@
+[
+  {
+    "id": "lowendbox",
+    "type": "rss",
+    "url": "https://lowendbox.com/feed/",
+    "interval_minutes": 60,
+    "enabled": true
+  },
+  {
+    "id": "lowendtalk-offers",
+    "type": "rss",
+    "url": "https://lowendtalk.com/categories/offers/feed.rss",
+    "interval_minutes": 60,
+    "enabled": true
+  },
+  {
+    "id": "nodeseek",
+    "type": "web_list",
+    "url": "https://www.nodeseek.com/categories/vps",
+    "interval_minutes": 30,
+    "enabled": true,
+    "selector": "a"
+  },
+  {
+    "id": "vpsdeals",
+    "type": "rss",
+    "url": "https://vpsdeals.com/feed/",
+    "interval_minutes": 120,
+    "enabled": true
+  },
+  {
+    "id": "reddit-vpsdeals",
+    "type": "rss",
+    "url": "https://www.reddit.com/r/VPSDeals/.rss",
+    "interval_minutes": 360,
+    "enabled": true,
+    "headers": {
+      "User-Agent": "vps-hot/1.2"
+    }
+  },
+  {
+    "id": "reddit-FreeVPS",
+    "type": "rss",
+    "url": "https://www.reddit.com/r/FreeVPS/.rss",
+    "interval_minutes": 360,
+    "enabled": true,
+    "headers": {
+      "User-Agent": "vps-hot/1.2"
+    }
+  },
+  {
+    "id": "reddit-hosting",
+    "type": "rss",
+    "url": "https://www.reddit.com/r/hosting/.rss",
+    "interval_minutes": 360,
+    "enabled": true,
+    "headers": {
+      "User-Agent": "vps-hot/1.2"
+    }
+  },
+  {
+    "id": "reddit-VPS",
+    "type": "rss",
+    "url": "https://www.reddit.com/r/VPS/.rss",
+    "interval_minutes": 360,
+    "enabled": false
+  },
+  {
+    "id": "reddit-oraclecloud",
+    "type": "rss",
+    "url": "https://www.reddit.com/r/oraclecloud/.rss",
+    "interval_minutes": 360,
+    "enabled": false
+  },
+  {
+    "id": "reddit-lowendbox",
+    "type": "rss",
+    "url": "https://www.reddit.com/r/lowendbox/.rss",
+    "interval_minutes": 360,
+    "enabled": false
+  }
+]
