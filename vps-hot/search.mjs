@@ -1,12 +1,15 @@
 // search.mjs - web search providers (zero deps)
-// SEARCH_PROVIDER: tavily | brave | serper | searxng | duckduckgo | bing | grok | auto (default: [grok if XAI_API_KEY] -> duckduckgo -> bing)
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+const execFileP = promisify(execFile);
+// SEARCH_PROVIDER: tavily | brave | serper | searxng | duckduckgo | bing | grok | auto (default: [grok if XAI_API_KEY] -> brave_html -> duckduckgo; bing 相关性差，仅显式选用)
 // Keys: SEARCH_API_KEY ; SEARXNG_URL for searxng
 async function getJson(url, opts = {}, timeout = 15000) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeout);
   try {
     const res = await fetch(url, { ...opts, signal: ctrl.signal });
-    if (!res.ok) throw new Error(`search HTTP ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`);
+    if (!res.ok) throw new Error(`search HTTP ${res.status}: ${(await res.text().catch(() => '')).replace(/\s+/g, " ").slice(0, 80)}`);
     return res;
   } finally { clearTimeout(t); }
 }
@@ -45,7 +48,50 @@ function grokExtract(data) {
   return { items: [...byUrl.values()], text };
 }
 
+let braveNext = 0;
+const GAP = parseInt(process.env.BRAVE_MIN_GAP_MS || '6000', 10);
+const BRAVE_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+// Brave 会按连接特征拦截 Node 的 fetch（429），系统 curl 正常，所以优先用 curl，不可用再回退 fetch
+async function braveGet(q) {
+  const url = `https://search.brave.com/search?q=${encodeURIComponent(q)}&source=web`;
+  try {
+    const { stdout } = await execFileP('curl', ['-sS', '-m', '15', '-w', '\n%{http_code}', '-A', BRAVE_UA, '-H', 'Accept-Language: en-US,en;q=0.9', url], { maxBuffer: 5_000_000 });
+    const i = stdout.lastIndexOf('\n');
+    const code = Number(stdout.slice(i + 1));
+    if (code !== 200) throw new Error(`search HTTP ${code}`);
+    return { text: async () => stdout.slice(0, i) };
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+    return getJson(url, { headers: { 'User-Agent': BRAVE_UA, 'Accept-Language': 'en-US,en;q=0.9' } });
+  }
+}
+function braveParse(html, n) {
+  const out = [];
+  for (const blk of html.split(/<div class="snippet[^"]*"[^>]*data-type="web"[^>]*>/).slice(1)) {
+    const href = blk.match(/<a href="(https?:\/\/[^"]+)"/)?.[1];
+    const title = blk.match(/class="title[^"]*search-snippet-title[^"]*"[^>]*>([\s\S]*?)<\/div>/)?.[1];
+    const snip = blk.match(/class="content[^"]*"[^>]*>([\s\S]*?)<\/div>/)?.[1];
+    if (!href || !title) continue;
+    out.push(norm(strip(title), href.replace(/&amp;/g, '&'), strip(snip)));
+    if (out.length >= n) break;
+  }
+  return out;
+}
+
 const providers = {
+  // 免 key：解析 Brave 搜索网页版（实测相关性明显好于 Bing/DDG；页面改版可能失效，auto 会自动回退）
+  async brave_html(q, n) {
+    // 节流：同进程内两次请求至少间隔 BRAVE_MIN_GAP_MS(默认6s)；429 时退避 10s 重试一次
+    const wait = Math.max(0, braveNext - Date.now());
+    braveNext = Date.now() + wait + GAP;
+    if (wait) await new Promise(r => setTimeout(r, wait));
+    let r;
+    try { r = await braveGet(q); } catch (e) {
+      if (!/HTTP 429/.test(e.message)) throw e;
+      await new Promise(r => setTimeout(r, 10000)); braveNext = Date.now() + GAP; r = await braveGet(q);
+    }
+    return braveParse(await r.text(), n);
+  },
   async grok(q, n) {
     const key = process.env.XAI_API_KEY || process.env.SEARCH_API_KEY;
     if (!key) throw new Error('XAI_API_KEY not set');
@@ -135,11 +181,11 @@ const providers = {
 export async function webSearch(query, n = 8) {
   const name = (process.env.SEARCH_PROVIDER || 'auto').toLowerCase();
   if (name === 'auto') {
-    const chain = process.env.XAI_API_KEY ? ['grok', 'duckduckgo', 'bing'] : ['duckduckgo', 'bing'];
+    const chain = process.env.XAI_API_KEY ? ['grok', 'brave_html', 'duckduckgo'] : ['brave_html', 'duckduckgo'];
     for (const k of chain) {
       try { const r = await providers[k](query, n); if (r.length) return r; } catch (e) { console.error(`[search] ${k} failed: ${e.message}`); }
     }
-    return [];
+    throw new Error('all free search backends failed or rate-limited; set XAI_API_KEY / SEARCH_API_KEY (tavily|brave|serper) for reliable search');
   }
   const fn = providers[name];
   if (!fn) throw new Error(`unknown SEARCH_PROVIDER: ${name}`);
@@ -147,7 +193,11 @@ export async function webSearch(query, n = 8) {
 }
 
 export async function searchMany(queries, perQuery = 8) {
-  const settled = await Promise.allSettled(queries.map(q => webSearch(q, perQuery)));
+  const settled = [];
+  for (const [i, q] of queries.entries()) {
+    if (i) await new Promise(r => setTimeout(r, 400));
+    settled.push(await webSearch(q, perQuery).then(value => ({ status: 'fulfilled', value }), reason => ({ status: 'rejected', reason })));
+  }
   const seen = new Set();
   const results = [];
   const errors = [];

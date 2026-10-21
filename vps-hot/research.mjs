@@ -26,7 +26,7 @@ export async function research(query, opts = {}) {
   const errors = [];
 
   const kw = await extractKeywords(query, provider);
-  let queries = kw.queries;
+  let queries = kw.queries.slice(0, 3);
   const all = [];            // 全部搜索结果（带稳定编号）
   const seen = new Set();
   const read = [];           // 已阅读页面 {n,url,title,text}
@@ -67,7 +67,7 @@ export async function research(query, opts = {}) {
       notes = String(a.notes || '');
       steps.push({ round, action: 'assess', enough: !!a.enough, notes });
       if (a.enough) break;
-      queries = arr(a.followups).map(String).filter(Boolean).slice(0, 3);
+      queries = arr(a.followups).map(String).filter(Boolean).slice(0, 2);
       if (!queries.length) break;
     } catch (e) { errors.push(`assess: ${e.message}`); break; }
   }

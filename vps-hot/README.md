@@ -56,10 +56,11 @@ Reddit 对云服务器IP限流严重，已停用：
 | `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | 内置提供商 `default`（OpenAI 兼容，`AI_BASE_URL` 需含 `/v1`）。在 Railway Cloud Agent VM 内未设置时回退到平台网关 |
 | `AI_JSON_MODE` | 设 `0` 关闭 `response_format`（不支持的服务商用；400 时也会自动重试） |
 | `AI_TEMPERATURE` | 可选；默认不发送（部分模型不支持） |
-| `SEARCH_PROVIDER` | `auto`(默认：grok(有key时)→duckduckgo→bing，免key，质量一般，云IP易被限) / `tavily` / `brave` / `serper` / `searxng` / `bing` / `grok` / `duckduckgo`。正式使用建议 tavily 或 brave |
+| `SEARCH_PROVIDER` | `auto`(默认：grok(有key时)→brave_html→duckduckgo，免key) / `tavily` / `brave` / `serper` / `searxng` / `bing` / `grok` / `duckduckgo`。正式使用建议 tavily 或 brave |
 | `XAI_API_KEY` | Grok 联网搜索 key。设置后 `SEARCH_PROVIDER=auto` 会优先用 Grok；或显式 `SEARCH_PROVIDER=grok` |
 | `GROK_MODEL` / `XAI_BASE_URL` | 默认 `grok-4.7` / `https://api.x.ai/v1` |
 | `GROK_ALLOWED_DOMAINS` / `GROK_EXCLUDED_DOMAINS` | 逗号分隔，最多 5 个，二选一，限制或排除搜索的域名 |
+| `BRAVE_MIN_GAP_MS` | 免 key 的 brave_html 两次请求最小间隔，默认 6000。Brave 会拦截 Node 的 fetch，所以通过系统 `curl` 请求；没有 curl 时回退 fetch（可能 429）。免 key 方案受限流影响，正式使用请配 key |
 | `SEARCH_API_KEY` | tavily/brave/serper 的 key |
 | `SEARXNG_URL` | searxng 实例地址 |
 
