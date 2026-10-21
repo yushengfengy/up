@@ -27,7 +27,13 @@ function saveUser(list) {
 }
 
 export function getProvider(id = 'default') {
-  if (!id || id === 'default') return defaultProvider();
+  if (!id || id === 'default') {
+    const d = defaultProvider();
+    if (d.baseUrl && d.apiKey) return d;
+    // 内置 AI 不可用（例如部署后没有平台网关）：回退到用户添加的第一个可用提供商
+    const u = loadUser().find(x => x.baseUrl && x.apiKey);
+    return u || d;
+  }
   const p = loadUser().find(x => x.id === id);
   if (!p) throw Object.assign(new Error(`unknown provider: ${id}`), { status: 400 });
   return p;

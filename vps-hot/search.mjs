@@ -86,9 +86,11 @@ const providers = {
     braveNext = Date.now() + wait + GAP;
     if (wait) await new Promise(r => setTimeout(r, wait));
     let r;
-    try { r = await braveGet(q); } catch (e) {
-      if (!/HTTP 429/.test(e.message)) throw e;
-      await new Promise(r => setTimeout(r, 10000)); braveNext = Date.now() + GAP; r = await braveGet(q);
+    for (let i = 0; ; i++) {
+      try { r = await braveGet(q); break; } catch (e) {
+        if (!/HTTP 429/.test(e.message) || i >= 2) throw e;
+        await new Promise(r => setTimeout(r, 10000 * (i + 1))); braveNext = Date.now() + GAP;
+      }
     }
     return braveParse(await r.text(), n);
   },
@@ -178,7 +180,19 @@ const providers = {
   },
 };
 
+// 结果缓存（内存，TTL 默认 6 小时）：重复/相近研究不再消耗搜索额度，也大幅减少免 key 方案的限流
+const cache = new Map();
+const TTL = parseInt(process.env.SEARCH_CACHE_TTL_MS || String(6 * 3600 * 1000), 10);
 export async function webSearch(query, n = 8) {
+  const key = `${process.env.SEARCH_PROVIDER || 'auto'}|${n}|${query.trim().toLowerCase()}`;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.t < TTL) return hit.v;
+  const v = await webSearchRaw(query, n);
+  if (v.length) { cache.set(key, { t: Date.now(), v }); if (cache.size > 300) cache.delete(cache.keys().next().value); }
+  return v;
+}
+
+async function webSearchRaw(query, n = 8) {
   const name = (process.env.SEARCH_PROVIDER || 'auto').toLowerCase();
   if (name === 'auto') {
     const chain = process.env.XAI_API_KEY ? ['grok', 'brave_html', 'duckduckgo'] : ['brave_html', 'duckduckgo'];

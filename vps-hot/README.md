@@ -76,3 +76,9 @@ curl -XDELETE "$URL/api/providers?id=mine" -H "Authorization: Bearer $T"
 curl -XPOST $URL/api/research -H "Authorization: Bearer $T" -d '{"query":"...","provider":"mine"}'
 ```
 不传 `provider` 就用内置 `default`。
+
+## 抓取与限流说明
+- 抓网页优先用系统 `curl`（很多站点按连接特征拦截 Node 的 fetch 返回 403），先校验 IP 再用 `--resolve` 固定，重定向逐跳校验（SSRF 防护）。
+- 直连失败（403/429/5xx 等）时回退 Jina Reader（`r.jina.ai`，会把目标 URL 发给第三方）；`FETCH_FALLBACK_JINA=0` 关闭。
+- 搜索结果内存缓存 6 小时（`SEARCH_CACHE_TTL_MS`）；Brave 免 key 遇 429 退避重试 2 次。免 key 仍受限流，正式使用请配 key。
+- 内置 AI 不可用（如部署后无平台网关）时，`default` 自动回退到用户添加的第一个可用提供商。
